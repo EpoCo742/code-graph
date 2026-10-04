@@ -100,6 +100,34 @@ Do these once, in order.
 - The catalog site rebuilds on every manifest change and weekly, so trace drift and enrichment stay current.
 - To add a framework or language, add a plugin in `packages/extractor/src/plugins/` or a frontend in `src/frontends/`, extend the samples, and add a test.
 
+## Deploying the explorer (PCF, Pages, or any static host)
+
+The explorer is a static single-page app with no backend. At startup it fetches one file, `graph.json`, from the folder it was served from (or from `?graph=<url>` if given), builds an in-memory model, and renders everything client-side. So a deployment is just a folder: the built bundle plus `graph.json`, optionally with the generated docs under `/docs`.
+
+`codegraph package` assembles that folder and adds what Cloud Foundry needs:
+
+```bash
+npm run build                                # once; builds the explorer bundle
+npm run extract:samples && npm run aggregate:samples
+node packages/cli/dist/cli.js package --graph out/graph.json --docs-dir out/docs --site site --app-name codegraph-explorer
+cf push -f site/manifest.yml -p site         # staticfile buildpack, 64M, rolling deploy
+```
+
+What ends up in `site/`:
+
+| File | Purpose |
+|---|---|
+| `index.html`, `assets/` | The explorer bundle, built with a relative base so it works at any route or sub-path. |
+| `graph.json` | The aggregated graph. Served with `Cache-Control: no-store` so users always see the latest deploy. |
+| `docs/` | Optional Markdown + Mermaid docs for download. |
+| `manifest.yml` | Cloud Foundry app manifest: `staticfile_buildpack`, memory, instances, app name. |
+| `Staticfile`, `nginx/conf/includes/codegraph.conf` | Buildpack config: HTTPS redirect, no directory listing, cache headers. |
+| `Staticfile.auth` | Only with `--htpasswd <file>`: basic auth for the whole site (generate the file with `htpasswd -nb user pass`). |
+
+Keeping it current: the catalog workflow (`templates/catalog-repo/.github/workflows/codegraph-site.yml`) already runs `codegraph package` after every aggregation and uploads the folder as an artifact. Its `pcf` job pushes the folder with the CF CLI whenever these are configured on the catalog repo: secrets `CF_API`, `CF_USERNAME`, `CF_PASSWORD` (use a service account), variables `CF_ORG`, `CF_SPACE`, and optionally `CF_APP_NAME` and secret `CODEGRAPH_HTPASSWD`. Every manifest change then produces a fresh `graph.json` and a rolling redeploy with zero downtime. The same job can target GitHub Pages instead, or both.
+
+If you prefer the data to update without redeploying the app, host `graph.json` elsewhere (a bucket, an internal file server) and link to the explorer with `?graph=https://.../graph.json`. The page fetches it with `no-store`, so the host needs CORS to allow the explorer's origin.
+
 ## How the pieces fit
 
 - **Manifests are the asset.** Small, reviewable JSON, produced by CI from the code that owns it. Everything else is derived and can be regenerated.

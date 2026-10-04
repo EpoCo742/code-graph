@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findRepos, scan } from './scan.js';
 import { serve } from './serve.js';
+import { packageSite } from './package.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..');
@@ -50,4 +51,19 @@ test('serve returns the graph and the explorer index', async (t) => {
   } finally {
     close();
   }
+});
+
+test('package assembles a static site with a PCF manifest', async (t) => {
+  const uiIndex = join(repoRoot, 'packages', 'ui', 'dist', 'index.html');
+  if (!existsSync(uiIndex)) { t.skip('UI not built'); return; }
+  const out = mkdtempSync(join(tmpdir(), 'cg-pkg-'));
+  const { graphPath } = await scan({ roots: [samples], out, configuredOnly: true, docs: true });
+  const site = packageSite({ graphPath, out: join(out, 'site'), docsDir: join(out, 'docs'), appName: 'flow-map', htpasswd: 'user:$apr1$x$y' });
+  for (const f of ['index.html', 'graph.json', 'manifest.yml', 'Staticfile', 'Staticfile.auth', 'nginx/conf/includes/codegraph.conf', 'docs/index.md']) {
+    assert.ok(existsSync(join(site.out, f)), `missing ${f}`);
+  }
+  const manifest = readFileSync(join(site.out, 'manifest.yml'), 'utf8');
+  assert.ok(manifest.includes('name: flow-map') && manifest.includes('staticfile_buildpack'));
+  const html = readFileSync(join(site.out, 'index.html'), 'utf8');
+  assert.ok(html.includes('./assets/') || html.includes('"./'), 'bundle must use a relative base');
 });

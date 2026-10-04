@@ -3,6 +3,7 @@ import { exec } from 'node:child_process';
 import { resolve } from 'node:path';
 import { scan } from './scan.js';
 import { serve } from './serve.js';
+import { packageSite } from './package.js';
 
 const HELP = `codegraph: map application flows across many repositories.
 
@@ -10,6 +11,7 @@ Usage:
   codegraph scan <root>... [options]     Extract every repo under the roots, aggregate, write graph + docs
   codegraph serve [options]              Serve the explorer UI for an existing graph.json
   codegraph open <root>... [options]     scan, then serve and open the browser
+  codegraph package [options]            Assemble a deployable static site (explorer + graph.json) with a PCF manifest
 
 Options:
   --out <dir>            Output directory (default: ./codegraph-out)
@@ -21,12 +23,18 @@ Options:
   --no-docs              Skip Markdown/Mermaid docs
   --graph <file>         serve: graph.json to serve (default: <out>/graph.json)
   --port <n>             serve/open: port (default: 4173)
+  --site <dir>           package: output folder (default: <out>/site)
+  --app-name <name>      package: Cloud Foundry app name (default: codegraph-explorer)
+  --docs-dir <dir>       package: include generated docs under /docs (default: <out>/docs if present)
+  --htpasswd <file>      package: enable basic auth with this htpasswd file
+  --memory <size>        package: CF memory (default: 64M)
   --verbose
 
 Examples:
   codegraph scan ~/src --config ~/src/codegraph-catalog/codegraph.aggregate.yaml
   codegraph open ~/src/orders-* ~/src/inventory-*
   codegraph serve --graph codegraph-out/graph.json
+  codegraph package --graph codegraph-out/graph.json --site ./site && cf push -f ./site/manifest.yml
 `;
 
 function parse(argv: string[]) {
@@ -72,6 +80,21 @@ async function main() {
     }
     log('press Ctrl+C to stop');
     return; // keep process alive while the server runs
+  }
+  if (cmd === 'package') {
+    const { readFileSync, existsSync } = await import('node:fs');
+    const docsDefault = resolve(out, 'docs');
+    const r = packageSite({
+      graphPath: (opts.graph as string) ?? resolve(out, 'graph.json'),
+      out: (opts.site as string) ?? resolve(out, 'site'),
+      appName: opts['app-name'] as string | undefined,
+      docsDir: (opts['docs-dir'] as string | undefined) ?? (existsSync(docsDefault) ? docsDefault : undefined),
+      htpasswd: opts.htpasswd ? readFileSync(opts.htpasswd as string, 'utf8') : undefined,
+      memory: opts.memory as string | undefined,
+      log,
+    });
+    console.log(r.out);
+    return;
   }
   console.error(`unknown command: ${cmd}\n`);
   console.log(HELP);

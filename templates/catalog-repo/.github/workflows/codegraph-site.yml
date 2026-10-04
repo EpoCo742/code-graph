@@ -12,6 +12,12 @@
 #   COPILOT_GITHUB_TOKEN  - a token with Copilot access (uses your Copilot seats, no extra vendor key)
 #   ANTHROPIC_API_KEY     - Anthropic API key (enables the cheaper Batch API path)
 # Without either, the graph is still built; flows just keep their structural names.
+#
+# Deployment targets (both optional, enable one or both):
+#   GitHub Pages          - enabled by the `pages` job below; turn on Pages (source: GitHub Actions) in repo settings.
+#   Cloud Foundry / PCF   - set secrets CF_API, CF_USERNAME, CF_PASSWORD and variables CF_ORG, CF_SPACE
+#                           (optional CF_APP_NAME, default codegraph-explorer). The `pcf` job pushes the packaged site
+#                           with the staticfile buildpack. Add a Staticfile.auth via secret CODEGRAPH_HTPASSWD for basic auth.
 
 name: codegraph-site
 
@@ -47,7 +53,7 @@ jobs:
           registry-url: https://npm.pkg.github.com
 
       - name: Install codegraph tooling
-        run: npm install --no-save @codegraph/aggregator @codegraph/enrich @codegraph/ui
+        run: npm install --no-save @codegraph/aggregator @codegraph/enrich @codegraph/ui @codegraph/cli
 
       - name: Aggregate (structural pass)
         run: |
@@ -85,7 +91,7 @@ jobs:
           TRACES=""
           if [ -f traces/service-graph.json ]; then TRACES="--traces traces/service-graph.json"; fi
           npx codegraph-aggregate manifests --config codegraph.aggregate.yaml --enrichment enrichment \
-            --out out/graph.json --docs out/docs --copy-to node_modules/@codegraph/ui/dist/graph.json $TRACES
+            --out out/graph.json --docs out/docs $TRACES
 
       - name: Persist enrichment, cache and docs
         run: |
@@ -96,11 +102,21 @@ jobs:
           git commit -m "codegraph: enrichment, cache and docs [skip ci]"
           git push
 
+      - name: Package static site (explorer + graph.json + docs + PCF manifest)
+        run: |
+          npx codegraph package --graph out/graph.json --docs-dir out/docs --site site --app-name "${{ vars.CF_APP_NAME || 'codegraph-explorer' }}"
+          if [ -n "${{ secrets.CODEGRAPH_HTPASSWD }}" ]; then echo "${{ secrets.CODEGRAPH_HTPASSWD }}" > site/Staticfile.auth; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codegraph-site
+          path: site
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: node_modules/@codegraph/ui/dist
+          path: site
 
-  deploy:
+  pages:
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -109,3 +125,29 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  pcf:
+    needs: build
+    if: ${{ vars.CF_ORG != '' }}
+    runs-on: ubuntu-latest
+    environment: pcf
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: codegraph-site
+          path: site
+      - name: Install Cloud Foundry CLI
+        run: |
+          curl -sL "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf && cf version
+      - name: cf push
+        env:
+          CF_API: ${{ secrets.CF_API }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api "$CF_API"
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o "${{ vars.CF_ORG }}" -s "${{ vars.CF_SPACE }}"
+          cf push -f site/manifest.yml -p site --strategy rolling
+          cf app "${{ vars.CF_APP_NAME || 'codegraph-explorer' }}" | grep -E "^(name|routes):"

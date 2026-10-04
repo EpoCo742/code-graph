@@ -16,7 +16,8 @@ export function isGraph(v: unknown): v is Graph {
 export async function loadInitialGraph(): Promise<LoadState> {
   const params = new URLSearchParams(window.location.search);
   if (params.get('demo') === '1') return { status: 'ready', graph: sampleGraph, source: 'demo fixture' };
-  const url = params.get('graph') ?? '/graph.json';
+  // Relative to the page so the site can live under any path; ?graph=<url> overrides.
+  const url = params.get('graph') ?? 'graph.json';
   try {
     const res = await fetch(url, { cache: 'no-store' });
     if (res.status === 404) return { status: 'empty', reason: `No graph found at ${url}` };
