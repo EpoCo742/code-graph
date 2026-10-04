@@ -1,72 +1,87 @@
 # code-graph
 
-Extract, aggregate and explore application flows across a fleet of services: UI → experience API → capability API → domain API, plus Kafka / RabbitMQ handlers and external systems.
+A map of how your applications call each other: which UI calls which API, which API calls which, and which services talk through Kafka or RabbitMQ. Generated from source code, nothing hand-drawn.
 
-Nothing is hand-written. Each repo runs a static extractor in GitHub Actions that emits a small manifest. A central catalog repo aggregates the manifests into a graph, derives end-to-end flows, merges observed edges from tracing, generates docs, and publishes an interactive explorer to GitHub Pages. AI (GitHub Copilot or Claude) is used only to name flows and summarise handlers, on changed code only, with caching.
+## Start here: the whole idea in three stages
+
+Each stage produces one file. That is the entire model.
 
 ```
- app repo (x30)                        catalog repo                             outputs
- ┌──────────────────┐  Actions  ┌───────────────────────────┐  Actions   ┌──────────────────────┐
- │ codegraph.yaml   │ ────────► │ manifests/<service>.json  │ ─────────► │ graph.json           │
- │ source code      │  npx      │ codegraph.aggregate.yaml  │  aggregate │ docs/*.md + Mermaid  │
- └──────────────────┘ extractor │ traces/service-graph.json │  enrich    │ explorer on Pages    │
-                                └───────────────────────────┘            └──────────────────────┘
+  your repo(s)          manifest.json (one per app)         graph.json             website
+ ┌────────────┐ extract ┌───────────────────────────┐ aggregate ┌──────────┐ view ┌─────────┐
+ │ source code│ ──────► │ endpoints, outbound calls, │ ────────► │ all apps │ ───► │ explore │
+ │            │         │ messages sent/received     │           │ joined   │      │         │
+ └────────────┘         └───────────────────────────┘           └──────────┘      └─────────┘
 ```
 
-Everything runs on plain **npm** and **GitHub Actions**. Developers interact through `codegraph.yaml`, PR comments, Copilot prompt files, and the explorer site.
+1. **Extract** reads one repo's code and writes a small `manifest.json` for that app.
+2. **Aggregate** reads a folder of manifests and writes one `graph.json`.
+3. **View** is a website that reads `graph.json`.
 
-## What is in this repo
+Everything else in this repo (CI workflows, AI naming, trace import, PCF deployment) only automates or enriches these three stages. You do not need any of it to get started.
 
-| Path | What it is |
-|---|---|
-| `packages/schema` | The contract: `ServiceManifest` (what one repo emits) and `Graph` (what the aggregator produces), with a validator. |
-| `packages/extractor` | `codegraph-extract <repo>`: tree-sitter static analysis for C#, Java, TypeScript and JavaScript. Detects ASP.NET Core, Spring, Express and NestJS endpoints; HttpClient, Refit, RestTemplate, WebClient, Feign, fetch and axios calls; Kafka and RabbitMQ consumers and publishers; and the intra-service handler call graph. |
-| `packages/aggregator` | `codegraph-aggregate`: resolves call targets, builds topic nodes, derives flows, merges traces, writes `graph.json` and Markdown/Mermaid docs. `codegraph-diff`: compares two manifests for PR comments. |
-| `packages/enrich` | `codegraph-enrich`: AI summaries and flow names via the GitHub Copilot SDK (uses Copilot seats) or the Anthropic SDK. Sends handler slices only, caches by content hash. |
-| `packages/ui` | Vite + React + React Flow explorer: layered service map, blast radius, endpoint explorer, flow sequence diagrams, issues. |
-| `packages/cli` | `codegraph scan|serve|open`: one command that extracts every repo under a directory, aggregates, and serves the explorer locally. No CI or catalog needed. |
-| `samples/` | A ten-service fake estate across all layers and languages, used by tests and the demo. |
-| `templates/app-repo/` | Files to copy into each application repo: workflow, `codegraph.yaml`, `.npmrc`, Copilot instructions and prompt files. |
-| `templates/catalog-repo/` | Files for the central catalog repo: site workflow, aggregate config, README. |
-| `scripts/set-scope.mjs` | Renames the `@codegraph` npm scope to your GitHub org before publishing. |
+## See it work in five commands (sample apps included)
 
-## Try it locally in five minutes
+Needs Node 22 or newer. Run in this folder:
 
-Requires Node 22.12+ and npm 10+. No other tooling.
-
-```bash
+```
 npm install
-npm run build                 # compiles every package
-npm test                      # 24 tests across schema, extractor, aggregator, enrich
-npm run extract:samples       # samples/* → out/manifests/*.json
-npm run aggregate:samples     # → out/graph.json, out/docs/, packages/ui/public/graph.json
-npm run ui:dev                # open http://localhost:5173
+npm run build
+npm run extract:samples        # samples/*  →  out/manifests/*.json
+npm run aggregate:samples      # out/manifests  →  out/graph.json
+node packages/cli/dist/cli.js serve --graph out/graph.json
 ```
 
-What you should see: 13 services (10 from manifests + 3 external systems), 20 endpoints, 4 topics, 12 HTTP edges, 7 flows, and one deliberate drift warning where the sample trace export shows a call that is not in code.
+Open http://127.0.0.1:4173. You are looking at the ten fake apps in `samples/`: a web UI, two experience APIs, one capability API, four domain APIs, two message processors, plus three external vendors. Try the Flows tab and pick "Storefront Web UI: placeOrder".
 
 ![Service map](docs/screenshots/service-map.png)
 
-![Place-order flow as a sequence diagram](docs/screenshots/flow-place-order.png)
+## Run it on your own apps in one command
 
-![Endpoint explorer](docs/screenshots/endpoints.png)
+Clone the repos you care about side by side in one folder, for example `C:\work\apps\orders-api`, `C:\work\apps\inventory-api`, and so on. Then:
 
-## Try it on your own repos (no CI needed)
-
-```bash
-npm run build
-node packages/cli/dist/cli.js open C:/src            # or: npx @codegraph/cli open ~/src once published
+```
+node packages/cli/dist/cli.js open C:\work\apps
 ```
 
-`codegraph open` finds every git repo (or any folder with a `codegraph.yaml`) up to two levels under the roots you give it, extracts each one in-process, aggregates, writes `codegraph-out/{manifests,graph.json,docs}`, and opens the explorer at http://127.0.0.1:4173. Repos without `codegraph.yaml` get inferred ids and layers; unresolved calls are printed with file and line so you know which `targets` entries to add. Pass `--config` for a shared `codegraph.aggregate.yaml` and `--traces` for a tracing export.
+This finds every repo in the folder, extracts each one, aggregates them, writes everything to `codegraph-out\`, and opens the browser. No configuration is required for a first look. Supported today: C# (ASP.NET Core), Java (Spring), TypeScript and JavaScript (Express, NestJS, React/fetch/axios), with Kafka and RabbitMQ.
 
-Optional AI enrichment of the demo graph (Copilot CLI login, `COPILOT_GITHUB_TOKEN`, or `ANTHROPIC_API_KEY`):
+Two things will happen on real code:
 
-```bash
-npm run enrich:samples -- --dry-run     # shows the requests and rough token counts, sends nothing
-npm run enrich:samples                  # ~10 small requests, cached by handler hash afterwards
-npm run aggregate:samples -- --enrichment ../../out/enrichment
-```
+- **Some calls will be "unresolved."** The extractor saw an HTTP call but could not tell which service it goes to, usually because the URL comes from a config key. The Issues tab lists each one with file and line. To fix one, add a `codegraph.yaml` at that repo's root with a mapping, then re-run:
+
+  ```yaml
+  service:
+    id: orders-api          # name used in the graph
+    layer: capability       # ui | experience | capability | domain | processor
+  targets:
+    "Services:Inventory:BaseUrl": inventory-api     # config key  → service id
+    INVENTORY_URL: inventory-api                    # env var     → service id
+    api.stripe.com: external:stripe                 # host        → external system
+  ```
+
+  A full example of this file is in `templates/app-repo/codegraph.yaml`. If you use Copilot in VS Code, the prompt `/codegraph-onboard` (from `templates/app-repo/.github/prompts/`) writes it for you.
+
+- **Layers are guessed from names.** A repo named `*-ui` lands in the UI lane, `*-experience-api` or `*-bff` in Experience, `*-capability-*` in Capability, `*-domain-*` in Domain, `*-worker` or `*-processor` in Processors. Set `layer:` in `codegraph.yaml` when the guess is wrong.
+
+## What is in this repo
+
+| Folder | What it is |
+|---|---|
+| `packages/extractor` | Stage 1. Static analysis built on tree-sitter. |
+| `packages/aggregator` | Stage 2. Joins manifests, resolves who calls whom, derives end-to-end flows, writes docs. |
+| `packages/ui` | Stage 3. The explorer website (React). |
+| `packages/cli` | The `codegraph` command that runs the stages together (`scan`, `serve`, `open`, `package`). |
+| `packages/schema` | The shape of `manifest.json` and `graph.json`. |
+| `packages/enrich` | Optional. Uses GitHub Copilot or Claude to name flows and summarise handlers. |
+| `samples/` | Ten fake apps used by tests and the demo above. |
+| `templates/` | Files to copy into your repos when you automate (part 2 below). |
+
+---
+
+# Part 2: Automating it for the whole organisation
+
+Everything above runs on one machine by hand. This part makes it run by itself: every repo publishes its own manifest on merge, a central repo rebuilds the graph, and the website is redeployed. Set it up once you have seen value from part 1.
 
 ## Rolling it out in your organisation
 
