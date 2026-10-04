@@ -20,7 +20,7 @@ export function writeDocs(graph: Graph, dir: string) {
     const inLayer = services.filter((s) => s.layer === layer);
     if (!inLayer.length) continue;
     idx += `## ${cap(layer)}\n\n| Service | Owner | Endpoints | Consumers | Calls | Publishes |\n|---|---|---|---|---|---|\n`;
-    for (const s of inLayer) idx += `| [${s.name}](services/${s.id}.md) | ${s.owner ?? ''} | ${s.stats.endpoints} | ${s.stats.consumers} | ${s.stats.calls} | ${s.stats.publishes} |\n`;
+    for (const s of inLayer) idx += `| [${s.name}](services/${fileName(s.id)}.md) | ${s.owner ?? ''} | ${s.stats.endpoints} | ${s.stats.consumers} | ${s.stats.calls} | ${s.stats.publishes} |\n`;
     idx += '\n';
   }
   idx += `## Flows\n\n| Flow | Use case | Entry | Steps | Services |\n|---|---|---|---|---|\n`;
@@ -68,7 +68,7 @@ export function writeDocs(graph: Graph, dir: string) {
     if (callers.length) md += `\n## Called by\n\n${callers.map((e) => `- ${e.source} (${e.status})`).join('\n')}\n`;
     const issues = graph.issues.filter((i) => i.service === s.id);
     if (issues.length) md += `\n## Issues\n\n${issues.map((i) => `- **${i.level}** ${i.code}: ${i.message}${i.location ? ` (${i.location.file}:${i.location.line})` : ''}`).join('\n')}\n`;
-    writeFileSync(join(dir, 'services', `${s.id}.md`), md);
+    writeFileSync(join(dir, 'services', `${fileName(s.id)}.md`), md);
   }
 
   // flows/<id>.md
@@ -131,6 +131,8 @@ export function flowSequenceMermaid(graph: Graph, f: Flow): string {
   return s;
 }
 
+/** Ids may contain ':' (external:host); keep file names portable. */
+const fileName = (id: string) => id.replace(/[^A-Za-z0-9._-]+/g, '-');
 const mid = (id: string) => 'n_' + id.replace(/[^A-Za-z0-9]/g, '_');
 const esc = (s: string) => s.replace(/"/g, "'").replace(/\|/g, '/').replace(/[\r\n]+/g, ' ');
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
