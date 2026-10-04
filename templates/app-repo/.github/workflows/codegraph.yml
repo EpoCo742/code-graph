@@ -1,0 +1,100 @@
+# codegraph: extract this service's manifest and publish it to the central catalog.
+# Copy to .github/workflows/codegraph.yml in each application repo.
+#
+# Needs:
+#   - .npmrc in the repo root mapping the @codegraph scope to GitHub Packages (see templates/app-repo/.npmrc)
+#   - secret CODEGRAPH_CATALOG_TOKEN: fine-grained PAT (or GitHub App token) with contents:write on the catalog repo
+#   - variable CODEGRAPH_CATALOG_REPO: owner/name of the catalog repo
+#
+# On pull requests it only diffs the manifest against the catalog copy and comments on the PR.
+# On pushes to main it commits manifests/<service-id>.json to the catalog repo.
+
+name: codegraph
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: write
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+
+      - name: Extract manifest
+        id: extract
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx --yes @codegraph/extractor . --out manifest.json
+          echo "service_id=$(node -p "require('./manifest.json').service.id")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codegraph-manifest
+          path: manifest.json
+
+      - name: Fetch previous manifest from catalog
+        id: previous
+        env:
+          GH_TOKEN: ${{ secrets.CODEGRAPH_CATALOG_TOKEN }}
+        run: |
+          if gh api "repos/${{ vars.CODEGRAPH_CATALOG_REPO }}/contents/manifests/${{ steps.extract.outputs.service_id }}.json" \
+               -H "Accept: application/vnd.github.raw+json" > previous.json 2>/dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Diff against catalog
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BEFORE=previous.json
+          [ "${{ steps.previous.outputs.found }}" = "true" ] || BEFORE=missing.json
+          npx --yes --package @codegraph/aggregator codegraph-diff "$BEFORE" manifest.json > diff.md
+          cat diff.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # One sticky comment per PR, updated in place.
+          MARKER="<!-- codegraph-manifest-diff -->"
+          BODY="$MARKER
+          $(cat diff.md)"
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" -f body="$BODY" > /dev/null
+          else
+            gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+          fi
+
+      - name: Publish manifest to catalog
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.CODEGRAPH_CATALOG_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${{ vars.CODEGRAPH_CATALOG_REPO }}.git" catalog
+          mkdir -p catalog/manifests
+          cp manifest.json "catalog/manifests/${{ steps.extract.outputs.service_id }}.json"
+          cd catalog
+          git config user.name "codegraph-bot"
+          git config user.email "codegraph-bot@users.noreply.github.com"
+          git add manifests
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "manifest: ${{ steps.extract.outputs.service_id }} @ ${{ github.sha }}"
+          git push

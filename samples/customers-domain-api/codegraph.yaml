@@ -1,0 +1,5 @@
+service:
+  id: customers-domain-api
+  name: Customers Domain API
+  layer: domain
+  owner: team-customers

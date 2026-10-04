@@ -1,0 +1,7 @@
+service:
+  id: payments-domain-api
+  name: Payments Domain API
+  layer: domain
+  owner: team-payments
+targets:
+  api.stripe.com: stripe

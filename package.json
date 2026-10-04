@@ -1,0 +1,22 @@
+{
+  "name": "code-graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Extract, aggregate and explore application flows across many services",
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "extract:samples": "npm run extract:samples -w @codegraph/extractor",
+    "aggregate:samples": "npm run aggregate:samples -w @codegraph/aggregator",
+    "enrich:samples": "npm run enrich:samples -w @codegraph/enrich",
+    "ui:dev": "npm run dev -w @codegraph/ui",
+    "ui:build": "npm run build -w @codegraph/ui",
+    "demo": "npm run build && npm run extract:samples && npm run aggregate:samples && npm run ui:dev"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  }
+}

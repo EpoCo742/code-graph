@@ -1,0 +1,38 @@
+{
+  "name": "@codegraph/aggregator",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "codegraph-aggregate": "./dist/cli.js",
+    "codegraph-diff": "./dist/diff-cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/*.test.js",
+    "aggregate:samples": "node dist/cli.js ../../out/manifests --config ../../samples/codegraph.aggregate.yaml --traces ../../samples/codegraph.traces.json --out ../../out/graph.json --docs ../../out/docs --copy-to ../ui/public/graph.json"
+  },
+  "dependencies": {
+    "@codegraph/schema": "*",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^24.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/code-graph.git",
+    "directory": "packages/aggregator"
+  }
+}

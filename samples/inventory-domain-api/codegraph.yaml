@@ -1,0 +1,8 @@
+service:
+  id: inventory-domain-api
+  name: Inventory Domain API
+  layer: domain
+  owner: team-supply
+targets:
+  wms.base-url: wms-vendor
+  api.wms-vendor.com: wms-vendor

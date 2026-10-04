@@ -1,0 +1,30 @@
+# codegraph extractor configuration. Copy to the repository root and fill in the service block.
+# Everything else is optional; the extractor infers what it can from package.json / *.csproj / pom.xml.
+service:
+  id: my-service-name            # kebab-case, unique across the estate; becomes the node id
+  name: My Service               # display name
+  layer: capability              # ui | experience | capability | domain | processor | external
+  owner: team-name
+  repo: https://github.com/your-org/my-service
+  description: One line on what this service is responsible for.
+  tags: [orders]
+
+# Source globs to scan (relative to repo root). Defaults cover src/**, and skip node_modules, bin, obj, dist, build, target, test folders.
+# include: ["src/**"]
+# exclude: ["**/*.test.ts", "**/Migrations/**"]
+
+# Map the hints the extractor sees in code to service ids. Keys are config keys, env vars,
+# named HttpClients, Feign client names, or hosts. Values are service ids or external:<name>.
+targets:
+  # "Services:Orders:BaseUrl": orders-capability-api
+  # ORDERS_URL: orders-capability-api
+  # orders: orders-capability-api            # named HttpClient / Feign client
+  # api.stripe.com: external:stripe
+
+# Dependencies that static analysis cannot see (e.g. through a shared SDK or sidecar).
+declaredDependencies: []
+  # - service: audit-log-api
+  #   reason: via shared AuditClient package
+
+# plugins:
+#   disable: [rabbitmq]

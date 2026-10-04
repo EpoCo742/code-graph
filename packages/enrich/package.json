@@ -1,0 +1,39 @@
+{
+  "name": "@codegraph/enrich",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "codegraph-enrich": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/*.test.js",
+    "enrich:samples": "node dist/cli.js ../../out/manifests --graph ../../out/graph.json --repos ../../samples --out ../../out/enrichment"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@codegraph/schema": "*",
+    "zod": "^4.0.0",
+    "@github/copilot-sdk": "^1.0.16"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^24.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/code-graph.git",
+    "directory": "packages/enrich"
+  }
+}

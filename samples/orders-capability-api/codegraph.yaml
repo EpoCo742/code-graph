@@ -1,0 +1,9 @@
+service:
+  id: orders-capability-api
+  name: Orders Capability API
+  layer: capability
+  owner: team-orders
+  description: Owns the order lifecycle; orchestrates inventory and payments.
+targets:
+  "Services:Inventory:BaseUrl": inventory-domain-api
+  "Services:Payments:BaseUrl": payments-domain-api

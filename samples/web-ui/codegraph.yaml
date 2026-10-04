@@ -1,0 +1,9 @@
+service:
+  id: web-ui
+  name: Storefront Web UI
+  layer: ui
+  owner: team-storefront
+  description: Customer-facing React storefront.
+targets:
+  VITE_ORDERS_EXP_URL: orders-experience-api
+  VITE_CATALOG_EXP_URL: catalog-experience-api

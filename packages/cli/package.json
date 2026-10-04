@@ -1,0 +1,23 @@
+{
+  "name": "@codegraph/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "codegraph": "./dist/cli.js" },
+  "files": ["dist", "README.md"],
+  "license": "MIT",
+  "publishConfig": { "registry": "https://npm.pkg.github.com", "access": "restricted" },
+  "repository": { "type": "git", "url": "https://github.com/your-org/code-graph.git", "directory": "packages/cli" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@codegraph/aggregator": "*",
+    "@codegraph/extractor": "*",
+    "@codegraph/schema": "*",
+    "@codegraph/ui": "*"
+  },
+  "devDependencies": { "typescript": "^5.6.0", "@types/node": "^24.0.0" }
+}

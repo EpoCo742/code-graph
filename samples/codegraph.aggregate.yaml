@@ -1,0 +1,28 @@
+# Aggregation config for the sample estate.
+# Keys in `targets` match an outbound call's targetHint (env var, config key, named client),
+# its URL host, or the URL itself; values are service ids or external:<id>.
+targets:
+  VITE_ORDERS_EXP_URL: orders-experience-api
+  VITE_CATALOG_EXP_URL: catalog-experience-api
+  ORDERS_CAP_URL: orders-capability-api
+  CUSTOMERS_URL: customers-domain-api
+  PRODUCTS_URL: products-domain-api
+  inventory: inventory-domain-api
+  "Services:Payments:BaseUrl": payments-domain-api
+  "Services:Customers:BaseUrl": customers-domain-api
+  api.stripe.com: external:stripe
+  api.sendgrid.com: external:sendgrid
+  api.wms-vendor.com: external:wms-vendor
+
+externals:
+  stripe: { name: Stripe, description: Card payment processor, owner: payments-team }
+  sendgrid: { name: SendGrid, description: Transactional email, owner: platform-team }
+  wms-vendor: { name: Warehouse vendor, description: Third-party warehouse management system (stock levels), owner: fulfilment-team }
+
+traceServiceMap:
+  orders-cap: orders-capability-api
+  orders-exp: orders-experience-api
+
+flows:
+  maxDepth: 8
+  includeNonRoots: false

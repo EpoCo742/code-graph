@@ -1,0 +1,111 @@
+# codegraph catalog: rebuild the graph, docs and explorer site whenever a manifest changes.
+# Copy to .github/workflows/codegraph-site.yml in the catalog repo (the repo that receives manifests).
+#
+# Catalog repo layout:
+#   manifests/<service-id>.json      written by each app's codegraph workflow
+#   codegraph.aggregate.yaml         resolution config (targets, externals, trace map)
+#   traces/service-graph.json        optional: observed edges exported from tracing
+#   repos/                           optional: checkouts for AI source slices (see "Fetch repos" step)
+#   enrichment/, .codegraph-cache/   written back by this workflow
+#
+# AI enrichment runs when either secret is present:
+#   COPILOT_GITHUB_TOKEN  - a token with Copilot access (uses your Copilot seats, no extra vendor key)
+#   ANTHROPIC_API_KEY     - Anthropic API key (enables the cheaper Batch API path)
+# Without either, the graph is still built; flows just keep their structural names.
+
+name: codegraph-site
+
+on:
+  push:
+    branches: [main]
+    paths: ['manifests/**', 'codegraph.aggregate.yaml', 'traces/**']
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'   # weekly refresh so trace drift and enrichment stay current
+
+permissions:
+  contents: write
+  packages: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: codegraph-site
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+
+      - name: Install codegraph tooling
+        run: npm install --no-save @codegraph/aggregator @codegraph/enrich @codegraph/ui
+
+      - name: Aggregate (structural pass)
+        run: |
+          TRACES=""
+          if [ -f traces/service-graph.json ]; then TRACES="--traces traces/service-graph.json"; fi
+          npx codegraph-aggregate manifests --config codegraph.aggregate.yaml --out out/graph.json $TRACES
+
+      # Source slices for AI summaries need the repos. Keep this list in repos.txt (one owner/name per line)
+      # and give CODEGRAPH_READ_TOKEN read access to them. Skip the step entirely to enrich flows only.
+      - name: Fetch repos for source slices
+        if: ${{ hashFiles('repos.txt') != '' && (secrets.COPILOT_GITHUB_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '') }}
+        env:
+          GH_TOKEN: ${{ secrets.CODEGRAPH_READ_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p repos
+          while read -r repo; do
+            [ -z "$repo" ] && continue
+            id=$(node -p "const m=require('./out/graph.json');(m.nodes.find(n=>n.kind==='service'&&n.repo&&n.repo.endsWith('/$repo'))||{}).id||''")
+            [ -z "$id" ] && { echo "no manifest declares repo $repo"; continue; }
+            git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/$repo.git" "repos/$id"
+          done < repos.txt
+
+      - name: AI enrichment (diff-only, cached)
+        if: ${{ secrets.COPILOT_GITHUB_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          EXTRA=""
+          if [ -n "$ANTHROPIC_API_KEY" ]; then EXTRA="--provider anthropic --batch"; else EXTRA="--provider copilot"; fi
+          npx codegraph-enrich manifests --graph out/graph.json --repos repos --out enrichment --cache .codegraph-cache/enrich $EXTRA
+
+      - name: Aggregate (final) and docs
+        run: |
+          TRACES=""
+          if [ -f traces/service-graph.json ]; then TRACES="--traces traces/service-graph.json"; fi
+          npx codegraph-aggregate manifests --config codegraph.aggregate.yaml --enrichment enrichment \
+            --out out/graph.json --docs out/docs --copy-to node_modules/@codegraph/ui/dist/graph.json $TRACES
+
+      - name: Persist enrichment, cache and docs
+        run: |
+          git config user.name "codegraph-bot"
+          git config user.email "codegraph-bot@users.noreply.github.com"
+          git add -A enrichment .codegraph-cache out/docs 2>/dev/null || true
+          if git diff --cached --quiet; then echo "nothing to persist"; exit 0; fi
+          git commit -m "codegraph: enrichment, cache and docs [skip ci]"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: node_modules/@codegraph/ui/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

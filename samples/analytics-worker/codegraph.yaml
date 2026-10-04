@@ -1,0 +1,5 @@
+service:
+  id: analytics-worker
+  name: Analytics Worker
+  layer: processor
+  owner: team-data

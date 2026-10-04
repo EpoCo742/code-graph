@@ -1,0 +1,11 @@
+{
+  "comment": "Sample export in Jaeger /api/dependencies shape. orders-cap/orders-exp exercise traceServiceMap; catalog-experience-api -> inventory-domain-api is deliberately trace-only to demonstrate drift detection.",
+  "data": [
+    { "parent": "web-ui", "child": "orders-exp", "callCount": 1200 },
+    { "parent": "orders-exp", "child": "orders-cap", "callCount": 1180 },
+    { "parent": "orders-cap", "child": "inventory-domain-api", "callCount": 1180 },
+    { "parent": "orders-cap", "child": "payments-domain-api", "callCount": 1150 },
+    { "parent": "notification-processor", "child": "customers-domain-api", "callCount": 900 },
+    { "parent": "catalog-experience-api", "child": "inventory-domain-api", "callCount": 40 }
+  ]
+}

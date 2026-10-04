@@ -1,0 +1,7 @@
+service:
+  id: catalog-experience-api
+  name: Catalog Experience API
+  layer: experience
+  owner: team-catalog
+targets:
+  PRODUCTS_API_URL: products-domain-api

@@ -1,0 +1,9 @@
+service:
+  id: orders-experience-api
+  name: Orders Experience API
+  layer: experience
+  owner: team-storefront
+  description: BFF that shapes order data for the storefront.
+targets:
+  ORDERS_CAP_URL: orders-capability-api
+  CUSTOMERS_API_URL: customers-domain-api

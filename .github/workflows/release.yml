@@ -1,0 +1,33 @@
+# Publish all packages to GitHub Packages on a version tag (v1.2.3).
+# App repos then run `npx @codegraph/extractor` with their .npmrc pointing @codegraph at npm.pkg.github.com.
+# Before the first release, run `node scripts/set-scope.mjs <your-github-org>` so the scope matches the org.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Set version from tag
+        run: npm version "${GITHUB_REF_NAME#v}" --workspaces --no-git-tag-version --allow-same-version
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --workspaces --access restricted

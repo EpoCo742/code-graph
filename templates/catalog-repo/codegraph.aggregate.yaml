@@ -1,0 +1,18 @@
+# Central resolution config. Keys in `targets` match an outbound call's targetHint
+# (config key, env var, named client), its URL host, or the URL; regex keys as /.../.
+# Prefer putting mappings in each repo's codegraph.yaml; use this file for cross-cutting rules.
+targets:
+  # "/\\.internal\\.example\\.com$/": ignore   # example regex
+  # api.stripe.com: external:stripe
+
+externals:
+  # stripe: { name: Stripe, description: Card payments, owner: payments-team }
+
+# Trace service names (from OpenTelemetry service.name) that differ from manifest ids.
+traceServiceMap: {}
+
+flows:
+  maxDepth: 8
+  includeNonRoots: false
+
+ignoreServices: []
