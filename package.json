@@ -4,7 +4,7 @@
   "private": true,
   "description": "Extract, aggregate and explore application flows across many services",
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @codegraph/schema && npm run build -w @codegraph/extractor && npm run build -w @codegraph/aggregator && npm run build -w @codegraph/enrich && npm run build -w @codegraph/ui && npm run build -w @codegraph/cli",
     "test": "npm test --workspaces --if-present",
     "extract:samples": "npm run extract:samples -w @codegraph/extractor",
     "aggregate:samples": "npm run aggregate:samples -w @codegraph/aggregator",
